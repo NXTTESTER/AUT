@@ -1,0 +1,896 @@
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local FireInput = ReplicatedStorage.ReplicatedModules.KnitPackage.Knit.Services.MoveInputService.RF.FireInput
+
+local walkSpeedValue = 50
+local speedEnabled = false
+local oldNewIndex
+
+if game:GetService("CoreGui"):FindFirstChild("ToanLua") then
+	game:GetService("CoreGui").ToanLua:Destroy()
+end
+
+local menu = Instance.new("ScreenGui")
+menu.Name = "ToanLua"
+menu.Parent = game:GetService("CoreGui")
+menu.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local glassColor = Color3.fromRGB(30, 30, 35)
+local glassTransparency = 0.2
+local glassEdgeColor = Color3.fromRGB(255, 255, 255)
+local glassEdgeTransparency = 0.8
+local headerColor = Color3.fromRGB(40, 80, 160)
+local buttonColor = Color3.fromRGB(50, 50, 55)
+local buttonTransparency = 0.5
+local cornerRadius = UDim.new(0, 6)
+
+local originalSize = UDim2.new(0, 260, 0.8, 0)
+local minSize = Vector2.new(240, 220)
+local maxSize = Vector2.new(350, 450)
+local headerHeight = 32
+local tabContainerHeight = 30
+
+local frame = Instance.new("Frame")
+frame.Size = originalSize
+frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+frame.AnchorPoint = Vector2.new(0.5, 0.5)
+frame.BackgroundColor3 = glassColor
+frame.BackgroundTransparency = glassTransparency
+frame.BorderSizePixel = 0
+frame.Parent = menu
+
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 4)
+frameCorner.Parent = frame
+
+local frameStroke = Instance.new("UIStroke")
+frameStroke.Color = glassEdgeColor
+frameStroke.Transparency = glassEdgeTransparency
+frameStroke.Thickness = 1
+frameStroke.Parent = frame
+
+local sizeConstraint = Instance.new("UISizeConstraint")
+sizeConstraint.MinSize = minSize
+sizeConstraint.MaxSize = maxSize
+sizeConstraint.Parent = frame
+
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, headerHeight)
+header.BackgroundColor3 = headerColor
+header.BackgroundTransparency = glassTransparency - 0.1
+header.BorderSizePixel = 0
+header.Parent = frame
+
+local headerGloss = Instance.new("UIGradient")
+headerGloss.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+headerGloss.Transparency = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 0.9),
+	NumberSequenceKeypoint.new(0.5, 0.8),
+	NumberSequenceKeypoint.new(1, 0.95)
+})
+headerGloss.Parent = header
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -100, 1, 0)
+title.Position = UDim2.new(0, 12, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "TOAN LUA"
+title.TextColor3 = Color3.fromRGB(240, 240, 240)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 14
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = header
+
+local function createControlButton(name, text, positionOffset)
+	local button = Instance.new("TextButton")
+	button.Name = name
+	button.Size = UDim2.new(0, 32, 1, 0)
+	button.Position = UDim2.new(1, positionOffset, 0, 0)
+	button.BackgroundTransparency = 1
+	button.Text = text
+	button.TextColor3 = Color3.fromRGB(240, 240, 240)
+	button.Font = Enum.Font.GothamBold
+	button.TextSize = 18
+	button.Parent = header
+	return button
+end
+
+local closeButton = createControlButton("CloseButton", "×", -32)
+local minimizeButton = createControlButton("MinimizeButton", "−", -64)
+
+local tabContainer = Instance.new("Frame")
+tabContainer.Name = "TabContainer"
+tabContainer.Size = UDim2.new(1, 0, 0, tabContainerHeight)
+tabContainer.Position = UDim2.new(0, 0, 0, headerHeight)
+tabContainer.BackgroundTransparency = 1
+tabContainer.BorderSizePixel = 0
+tabContainer.Parent = frame
+
+local tabLayout = Instance.new("UIListLayout")
+tabLayout.FillDirection = Enum.FillDirection.Horizontal
+tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+tabLayout.Parent = tabContainer
+
+local tabSelectedColor = headerColor
+local tabSelectedTransparency = 0.3
+local tabDeselectedColor = buttonColor
+local tabDeselectedTransparency = 0.5
+
+local function createTabButton(text)
+	local button = Instance.new("TextButton")
+	button.Name = text
+	button.Size = UDim2.new(0.333, 0, 1, 0)
+	button.BackgroundColor3 = tabDeselectedColor
+	button.BackgroundTransparency = tabDeselectedTransparency
+	button.TextColor3 = Color3.fromRGB(200, 200, 200)
+	button.Font = Enum.Font.GothamBold
+	button.TextSize = 14
+	button.Text = text
+	button.Parent = tabContainer
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = cornerRadius
+	corner.Parent = button
+
+	return button
+end
+
+local mainTab = createTabButton("Main")
+local visualTab = createTabButton("Visual")
+local miscTab = createTabButton("Misc")
+local allTabs = {mainTab, visualTab, miscTab}
+
+local pageContainer = Instance.new("Frame")
+pageContainer.Name = "PageContainer"
+pageContainer.Size = UDim2.new(1, 0, 1, -headerHeight - tabContainerHeight)
+pageContainer.Position = UDim2.new(0, 0, 0, headerHeight + tabContainerHeight)
+pageContainer.BackgroundTransparency = 1
+pageContainer.ClipsDescendants = true
+pageContainer.Parent = frame
+
+local function createPage(name, parent)
+	local page = Instance.new("ScrollingFrame")
+	page.Name = name
+	page.Size = UDim2.new(1, 0, 1, 0)
+	page.Position = UDim2.new(0, 0, 0, 0)
+	page.BackgroundTransparency = 1
+	page.BorderSizePixel = 0
+	page.ScrollBarThickness = 4
+	page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	page.Parent = parent
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingTop = UDim.new(0, 10)
+	padding.PaddingBottom = UDim.new(0, 10)
+	padding.PaddingLeft = UDim.new(0, 10)
+	padding.PaddingRight = UDim.new(0, 10)
+	padding.Parent = page
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 8)
+	layout.Parent = page
+
+	return page
+end
+
+local mainPage = createPage("MainPage", pageContainer)
+local visualPage = createPage("VisualPage", pageContainer)
+local miscPage = createPage("MiscPage", pageContainer)
+local teleportPage = createPage("TeleportPage", pageContainer)
+local farmModePage = createPage("FarmModePage", pageContainer)
+local crystalPage = createPage("CrystalPage", pageContainer)
+local farmCategoryPage = createPage("FarmCategoryPage", pageContainer)
+
+local inPos = UDim2.new(0, 0, 0, 0)
+local outLeftPos = UDim2.new(-1, 0, 0, 0)
+local outRightPos = UDim2.new(1, 0, 0, 0)
+local slideInfo = TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out)
+
+local currentPage = mainPage
+
+mainPage.Visible = true
+visualPage.Visible = false
+miscPage.Visible = false
+mainTab.BackgroundColor3 = tabSelectedColor
+mainTab.BackgroundTransparency = tabSelectedTransparency
+
+teleportPage.Position = outRightPos
+farmModePage.Position = outRightPos
+crystalPage.Position = outRightPos
+farmCategoryPage.Position = outRightPos
+teleportPage.Visible = false
+farmModePage.Visible = false
+crystalPage.Visible = false
+farmCategoryPage.Visible = false
+
+local function switchTab(tabToShow, pageToShow)
+	if currentPage == pageToShow then return end
+
+	mainPage.Visible = false
+	visualPage.Visible = false
+	miscPage.Visible = false
+	teleportPage.Visible = false
+	farmModePage.Visible = false
+	crystalPage.Visible = false
+	farmCategoryPage.Visible = false
+
+	teleportPage.Position = outRightPos
+	farmModePage.Position = outRightPos
+	crystalPage.Position = outRightPos
+	farmCategoryPage.Position = outRightPos
+
+	mainPage.Position = inPos
+	visualPage.Position = inPos
+	miscPage.Position = inPos
+
+	for _, tab in pairs(allTabs) do
+		tab.BackgroundColor3 = tabDeselectedColor
+		tab.BackgroundTransparency = tabDeselectedTransparency
+	end
+
+	tabToShow.BackgroundColor3 = tabSelectedColor
+	tabToShow.BackgroundTransparency = tabSelectedTransparency
+	pageToShow.Visible = true
+	currentPage = pageToShow
+end
+
+mainTab.MouseButton1Click:Connect(function() switchTab(mainTab, mainPage) end)
+visualTab.MouseButton1Click:Connect(function() switchTab(visualTab, visualPage) end)
+miscTab.MouseButton1Click:Connect(function() switchTab(miscTab, miscPage) end)
+
+local function slideToPage(pageToShow, isBack)
+	if pageToShow == currentPage then return end
+
+	local pageToHide = currentPage
+	currentPage = pageToShow
+
+	local startPos, endPos
+
+	if isBack then
+		startPos = outLeftPos
+		endPos = outRightPos
+	else
+		startPos = outRightPos
+		endPos = outLeftPos
+	end
+
+	pageToShow.Position = startPos
+	pageToShow.Visible = true
+
+	TweenService:Create(pageToHide, slideInfo, {Position = endPos}):Play()
+	local slideIn = TweenService:Create(pageToShow, slideInfo, {Position = inPos})
+	slideIn:Play()
+
+	slideIn.Completed:Connect(function()
+		pageToHide.Visible = false
+	end)
+end
+
+local function createBackButton(parentPage, returnToPage)
+	local backButton = Instance.new("TextButton")
+	backButton.Name = "BackButton"
+	backButton.Size = UDim2.new(1, 0, 0, 30)
+	backButton.BackgroundColor3 = headerColor
+	backButton.BackgroundTransparency = 0.3
+	backButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+	backButton.Font = Enum.Font.GothamBold
+	backButton.TextSize = 14
+	backButton.Text = "← Quay Lại"
+	backButton.Parent = parentPage
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = cornerRadius
+	corner.Parent = backButton
+
+	backButton.MouseButton1Click:Connect(function()
+		slideToPage(returnToPage, true)
+	end)
+	return backButton
+end
+
+createBackButton(teleportPage, miscPage)
+createBackButton(farmModePage, mainPage)
+createBackButton(crystalPage, miscPage)
+createBackButton(farmCategoryPage, mainPage)
+
+local minimized = false
+local isAnimating = false
+local minInfo = TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out)
+
+local minButtonOriginal = {
+	Parent = minimizeButton.Parent,
+	Position = minimizeButton.Position,
+	Size = minimizeButton.Size
+}
+
+local lastFramePosition = frame.Position
+local lastFrameAnchor = frame.AnchorPoint
+
+minimizeButton.MouseButton1Click:Connect(function()
+	if isAnimating then return end
+
+	isAnimating = true
+	minimized = not minimized
+	dragging = false
+
+	if minimized then
+		header.Visible = false
+		pageContainer.Visible = false
+		closeButton.Visible = false
+		tabContainer.Visible = false
+
+		minimizeButton.Text = "+"
+		minimizeButton.Parent = frame
+
+		frame.AnchorPoint = Vector2.new(0, 0)
+
+		sizeConstraint.MinSize = Vector2.new(40, 40)
+		sizeConstraint.MaxSize = Vector2.new(40, 40)
+
+		local tweenSize = TweenService:Create(frame, minInfo, {Size = UDim2.new(0, 40, 0, 40)})
+		local tweenPos = TweenService:Create(frame, minInfo, {Position = UDim2.new(0, 0, 0, 0)})
+		local tweenCorner = TweenService:Create(frameCorner, minInfo, {CornerRadius = UDim.new(0, 8)})
+		local tweenMinPos = TweenService:Create(minimizeButton, minInfo, {Position = UDim2.new(0, 0, 0, 0)})
+		local tweenMinSize = TweenService:Create(minimizeButton, minInfo, {Size = UDim2.new(1, 0, 1, 0)})
+
+		tweenSize:Play()
+		tweenPos:Play()
+		tweenCorner:Play()
+		tweenMinPos:Play()
+		tweenMinSize:Play()
+
+		tweenSize.Completed:Connect(function()
+			isAnimating = false
+		end)
+
+	else
+		minimizeButton.Text = "−"
+		minimizeButton.Parent = minButtonOriginal.Parent
+		frame.AnchorPoint = lastFrameAnchor
+
+		header.Visible = true
+		pageContainer.Visible = true
+		closeButton.Visible = true
+		tabContainer.Visible = true
+
+		sizeConstraint.MinSize = minSize
+		sizeConstraint.MaxSize = maxSize
+
+		local tweenSize = TweenService:Create(frame, minInfo, {Size = originalSize})
+		local tweenPos = TweenService:Create(frame, minInfo, {Position = lastFramePosition})
+		local tweenCorner = TweenService:Create(frameCorner, minInfo, {CornerRadius = UDim.new(0, 4)})
+		local tweenMinPos = TweenService:Create(minimizeButton, minInfo, {Position = minButtonOriginal.Position})
+		local tweenMinSize = TweenService:Create(minimizeButton, minInfo, {Size = minButtonOriginal.Size})
+
+		tweenSize:Play()
+		tweenPos:Play()
+		tweenCorner:Play()
+		tweenMinPos:Play()
+		tweenMinSize:Play()
+
+		tweenSize.Completed:Connect(function()
+			isAnimating = false
+		end)
+	end
+end)
+
+closeButton.MouseButton1Click:Connect(function()
+	menu:Destroy()
+end)
+
+local dragging = false
+local dragInput, dragStart, startPos
+
+header.InputBegan:Connect(function(input)
+	if minimized or isAnimating then return end
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = frame.Position
+
+		local conn
+		conn = input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+				lastFramePosition = frame.Position
+				lastFrameAnchor = frame.AnchorPoint
+				conn:Disconnect()
+			end
+		end)
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		if dragging and not minimized and not isAnimating then
+			local delta = input.Position - dragStart
+			local newPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+			frame.Position = newPos
+
+			lastFramePosition = newPos
+			lastFrameAnchor = frame.AnchorPoint
+		end
+	end
+end)
+
+local farmEnabled = false
+local farmMode = "Phía Sau"
+local farmOptions = {"Phía Sau", "Phía Dưới"}
+
+local currentFarmCategory = "Event: Halloween"
+local farmCategories = {
+	["Event: Halloween"] = {"Vampire", "Werewolf", "Skeleton", "Ghost", "Ghoul"},
+	["Lv 1: Thug"] = {"Thug"},
+	["Lv 40-80: Hooligan"] = {"Hooligan"},
+	["Lv 100-130: Curses"] = {"Roppongi Curse", "Mantis Curse", "Jujutsu Sorcerer", "Flyhead"},
+	["Lv 100-200: Pirate"] = {"Pirate"}
+}
+local farmCategoryOrder = {
+	"Event: Halloween",
+	"Lv 1: Thug",
+	"Lv 40-80: Hooligan",
+	"Lv 100-130: Curses",
+	"Lv 100-200: Pirate"
+}
+local farmTargets = farmCategories[currentFarmCategory]
+
+local function createToggleButton(text, parent)
+	local button = Instance.new("TextButton")
+	button.Name = text
+	button.Size = UDim2.new(1, 0, 0, 30)
+	button.BackgroundColor3 = buttonColor
+	button.BackgroundTransparency = buttonTransparency
+	button.TextColor3 = Color3.fromRGB(200, 200, 200)
+	button.Font = Enum.Font.GothamBold
+	button.TextSize = 14
+	button.Text = text .. " [TẮT]"
+	button.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = cornerRadius
+	corner.Parent = button
+
+	button.MouseButton1Click:Connect(function()
+		if text == "Auto Farm" then
+			farmEnabled = not farmEnabled
+			button.Text = text .. " [" .. (farmEnabled and "BẬT" or "TẮT") .. "]"
+			button.BackgroundColor3 = farmEnabled and headerColor or buttonColor
+			button.BackgroundTransparency = farmEnabled and tabSelectedTransparency or buttonTransparency
+		end
+	end)
+
+	return button
+end
+
+local function createNavButton(labelText, buttonText, parent)
+	local container = Instance.new("Frame")
+	container.Name = labelText .. "Container"
+	container.Size = UDim2.new(1, 0, 0, 30)
+	container.BackgroundTransparency = 1
+	container.Parent = parent
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -125, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Text = labelText
+	label.TextColor3 = Color3.fromRGB(200, 200, 200)
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 14
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = container
+
+	local button = Instance.new("TextButton")
+	button.Name = labelText .. "Button"
+	button.Size = UDim2.new(0, 120, 1, 0)
+	button.Position = UDim2.new(1, -120, 0, 0)
+	button.BackgroundColor3 = buttonColor
+	button.BackgroundTransparency = buttonTransparency
+	button.TextColor3 = Color3.fromRGB(200, 200, 200)
+	button.Font = Enum.Font.GothamBold
+	button.TextSize = 14
+	button.Text = buttonText
+	button.Parent = container
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = cornerRadius
+	corner.Parent = button
+
+	return container, button
+end
+
+local farmButton = createToggleButton("Auto Farm", mainPage)
+
+local farmCategoryContainer, farmCategoryButton = createNavButton("Chế độ Farm:", currentFarmCategory, mainPage)
+farmCategoryButton.MouseButton1Click:Connect(function()
+	slideToPage(farmCategoryPage, false)
+end)
+
+local farmSettingsFrame = Instance.new("Frame")
+farmSettingsFrame.Size = UDim2.new(1, 0, 0, 30)
+farmSettingsFrame.BackgroundTransparency = 1
+farmSettingsFrame.Parent = mainPage
+
+local distanceLabel = Instance.new("TextLabel")
+distanceLabel.Size = UDim2.new(1, -125, 1, 0)
+distanceLabel.BackgroundTransparency = 1
+distanceLabel.Text = "Khoảng cách (studs):"
+distanceLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+distanceLabel.Font = Enum.Font.GothamBold
+distanceLabel.TextSize = 14
+distanceLabel.TextXAlignment = Enum.TextXAlignment.Left
+distanceLabel.Parent = farmSettingsFrame
+
+local distanceInput = Instance.new("TextBox")
+distanceInput.Name = "DistanceInput"
+distanceInput.Size = UDim2.new(0, 120, 1, 0)
+distanceInput.Position = UDim2.new(1, -120, 0, 0)
+distanceInput.BackgroundColor3 = buttonColor
+distanceInput.BackgroundTransparency = buttonTransparency
+distanceInput.TextColor3 = Color3.fromRGB(200, 200, 200)
+distanceInput.Font = Enum.Font.GothamBold
+distanceInput.TextSize = 14
+distanceInput.Text = "10"
+distanceInput.ClearTextOnFocus = false
+distanceInput.Parent = farmSettingsFrame
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = cornerRadius
+corner.Parent = distanceInput
+
+local farmModeContainer, farmModeButton = createNavButton("Kiểu Farm:", farmMode, mainPage)
+farmModeButton.MouseButton1Click:Connect(function()
+	slideToPage(farmModePage, false)
+end)
+
+local visualPlaceholder = Instance.new("TextLabel")
+visualPlaceholder.Size = UDim2.new(1, 0, 0, 30)
+visualPlaceholder.BackgroundTransparency = 1
+visualPlaceholder.TextColor3 = Color3.fromRGB(150, 150, 150)
+visualPlaceholder.Font = Enum.Font.Gotham
+visualPlaceholder.TextSize = 14
+visualPlaceholder.Text = "Chưa có tùy chọn Visual"
+visualPlaceholder.Parent = visualPage
+
+local teleportContainer, teleportButton = createNavButton("Teleport Map:", "Chọn map... >", miscPage)
+teleportButton.MouseButton1Click:Connect(function()
+	slideToPage(teleportPage, false)
+end)
+
+local crystalContainer, crystalButton = createNavButton("Teleport Crystal:", "Chọn map... >", miscPage)
+crystalButton.MouseButton1Click:Connect(function()
+	slideToPage(crystalPage, false)
+end)
+
+local speedToggleButton = Instance.new("TextButton")
+speedToggleButton.Name = "SpeedToggle"
+speedToggleButton.Size = UDim2.new(1, 0, 0, 30)
+speedToggleButton.BackgroundColor3 = buttonColor
+speedToggleButton.BackgroundTransparency = buttonTransparency
+speedToggleButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+speedToggleButton.Font = Enum.Font.GothamBold
+speedToggleButton.TextSize = 14
+speedToggleButton.Text = "Bật Speed [TẮT]"
+speedToggleButton.Parent = miscPage
+
+local cornerSpeedToggle = Instance.new("UICorner")
+cornerSpeedToggle.CornerRadius = cornerRadius
+cornerSpeedToggle.Parent = speedToggleButton
+
+local speedInputFrame = Instance.new("Frame")
+speedInputFrame.Size = UDim2.new(1, 0, 0, 30)
+speedInputFrame.BackgroundTransparency = 1
+speedInputFrame.Parent = miscPage
+
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(1, -125, 1, 0)
+speedLabel.BackgroundTransparency = 1
+speedLabel.Text = "Tốc độ (16-500):"
+speedLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+speedLabel.Font = Enum.Font.GothamBold
+speedLabel.TextSize = 14
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+speedLabel.Parent = speedInputFrame
+
+local speedInput = Instance.new("TextBox")
+speedInput.Name = "SpeedInput"
+speedInput.Size = UDim2.new(0, 120, 1, 0)
+speedInput.Position = UDim2.new(1, -120, 0, 0)
+speedInput.BackgroundColor3 = buttonColor
+speedInput.BackgroundTransparency = buttonTransparency
+speedInput.TextColor3 = Color3.fromRGB(200, 200, 200)
+speedInput.Font = Enum.Font.GothamBold
+speedInput.TextSize = 14
+speedInput.Text = tostring(walkSpeedValue)
+speedInput.ClearTextOnFocus = false
+speedInput.Parent = speedInputFrame
+
+local cornerSpeedInput = Instance.new("UICorner")
+cornerSpeedInput.CornerRadius = cornerRadius
+cornerSpeedInput.Parent = speedInput
+
+speedToggleButton.MouseButton1Click:Connect(function()
+	speedEnabled = not speedEnabled
+	speedToggleButton.Text = "Bật Speed [" .. (speedEnabled and "BẬT" or "TẮT") .. "]"
+	speedToggleButton.BackgroundColor3 = speedEnabled and headerColor or buttonColor
+	speedToggleButton.BackgroundTransparency = speedEnabled and tabSelectedTransparency or buttonTransparency
+	
+	if not speedEnabled then
+		if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+			LocalPlayer.Character.Humanoid.WalkSpeed = 16
+		end
+	end
+end)
+
+speedInput.FocusLost:Connect(function(enterPressed)
+	local newSpeed = tonumber(speedInput.Text)
+	if newSpeed then
+		walkSpeedValue = math.clamp(newSpeed, 16, 500)
+	else
+		walkSpeedValue = walkSpeedValue
+	end
+	speedInput.Text = tostring(walkSpeedValue)
+end)
+
+oldNewIndex = hookmetamethod(game, "__newindex", function(object, property, value)
+    if speedEnabled and tostring(object) == "Humanoid" and property == "WalkSpeed" then
+        return oldNewIndex(object, property, walkSpeedValue)
+    end
+    return oldNewIndex(object, property, value)
+end)
+
+menu.Destroying:Connect(function()
+    if oldNewIndex then
+        hookmetamethod(game, "__newindex", oldNewIndex)
+    end
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = 16
+    end
+end)
+
+for _, categoryName in ipairs(farmCategoryOrder) do
+	local catButton = Instance.new("TextButton")
+	catButton.Name = categoryName
+	catButton.Size = UDim2.new(1, 0, 0, 30)
+	catButton.BackgroundColor3 = buttonColor
+	catButton.BackgroundTransparency = buttonTransparency
+	catButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+	catButton.Font = Enum.Font.GothamBold
+	catButton.TextSize = 14
+	catButton.Text = categoryName
+	catButton.Parent = farmCategoryPage
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = cornerRadius
+	corner.Parent = catButton
+
+	catButton.MouseButton1Click:Connect(function()
+		currentFarmCategory = categoryName
+		farmTargets = farmCategories[categoryName] 
+		farmCategoryButton.Text = categoryName
+		slideToPage(mainPage, true)
+	end)
+end
+
+for _, modeName in pairs(farmOptions) do
+	local modeButton = Instance.new("TextButton")
+	modeButton.Name = modeName
+	modeButton.Size = UDim2.new(1, 0, 0, 30)
+	modeButton.BackgroundColor3 = buttonColor
+	modeButton.BackgroundTransparency = buttonTransparency
+	modeButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+	modeButton.Font = Enum.Font.GothamBold
+	modeButton.TextSize = 14
+	modeButton.Text = modeName
+	modeButton.Parent = farmModePage
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = cornerRadius
+	corner.Parent = modeButton
+
+	modeButton.MouseButton1Click:Connect(function()
+		farmMode = modeName
+		farmModeButton.Text = modeName
+		slideToPage(mainPage, true)
+	end)
+end
+
+local teleportLocations = {
+	["Starting: West Park"] = Vector3.new(-1444.4, 42.9, -840.7),
+	["Starting: Colosseum"] = Vector3.new(-2065.4, -2.7, -1000.2),
+	["Starting: West Station"] = Vector3.new(-1548.0, 46.8, 300.0),
+	["Starting: Subway"] = Vector3.new(-3412.5, -2.6, 114.1),
+	["Starting: Village"] = Vector3.new(-1010.6, 180.6, 1177.0),
+	["Starting: Desert"] = Vector3.new(-326.1, 160.7, 378.7),
+	["Starting: Knight's Cavern"] = Vector3.new(-317.4, -27.2, 563.5),
+	["Starting: Kuma"] = Vector3.new(-886.9, 96.4, -716.7),
+	["Starting: Trait Reroll"] = Vector3.new(-2196.0, -1.9, -504.1),
+	["JJK: Shibuya"] = Vector3.new(-4567.9, 85.7, 1571.4),
+	["LAB: Crystal Island"] = Vector3.new(10540.1, 6165.0, 80.0),
+	["LAB: Lab door"] = Vector3.new(745.6, -19.0, 1157.0),
+	["SummonBoss: Spawn Boss 2"] = Vector3.new(27325.1, -198.9, 12824.0),
+	["KUMA: Law Island"] = Vector3.new(-1654.3, -92.8, 16965.5),
+	["KUMA: Boa Island"] = Vector3.new(-14915.1, 3.2, 14364.2),
+	["KUMA: White Beard"] = Vector3.new(-13206.7, -209.0, -344.3),
+	["KUMA: Usop Island"] = Vector3.new(-9459.3, -148.4, -11637.7),
+	["KMAT: Pirate Island"] = Vector3.new(11396.3, -221.2, 12105.9),
+	["Halloween Map"] = Vector3.new(200.6, 105.7, 1855.9)
+}
+
+local crystalLocations = {
+	["LAB: Crystal Island"] = Vector3.new(10540.1, 6165.0, 80.0),
+	["LAB: Lab door"] = Vector3.new(745.6, -19.0, 1157.0),
+	["SECTOR: A"] = Vector3.new(5658.1, 85.9, -8188.3),
+	["SECTOR: B"] = Vector3.new(6208.5, 85.8, -8254.6),
+	["SECTOR: C"] = Vector3.new(5652.4, 171.2, -8647.6),
+	["Cosmic Remnant 1"] = Vector3.new(10593.1, 6189.8, -25.4),
+	["Cosmic Remnant 2"] = Vector3.new(10762.5, 6197.6, -84.0),
+	["Cosmic Remnant 3"] = Vector3.new(10731.8, 6195.0, -442.2),
+	["Cosmic Remnant 4"] = Vector3.new(10408.0, 6161.2, 352.7),
+	["Cosmic Remnant 5"] = Vector3.new(10218.1, 6165.8, 206.0)
+}
+
+local teleportOptions = {}
+for locationName, _ in pairs(teleportLocations) do
+	table.insert(teleportOptions, locationName)
+end
+table.sort(teleportOptions)
+
+for _, locationName in pairs(teleportOptions) do
+	local posButton = Instance.new("TextButton")
+	posButton.Name = locationName
+	posButton.Size = UDim2.new(1, 0, 0, 30)
+	posButton.BackgroundColor3 = buttonColor
+	posButton.BackgroundTransparency = buttonTransparency
+	posButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+	posButton.Font = Enum.Font.GothamBold
+	posButton.TextSize = 14
+	posButton.Text = locationName
+	posButton.Parent = teleportPage
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = cornerRadius
+	corner.Parent = posButton
+
+	posButton.MouseButton1Click:Connect(function()
+		local position = teleportLocations[locationName]
+		if position and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+			LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(position)
+		end
+
+		slideToPage(miscPage, true)
+	end)
+end
+
+local crystalOptions = {}
+for locationName, _ in pairs(crystalLocations) do
+	table.insert(crystalOptions, locationName)
+end
+table.sort(crystalOptions)
+
+for _, locationName in pairs(crystalOptions) do
+	local posButton = Instance.new("TextButton")
+	posButton.Name = locationName
+	posButton.Size = UDim2.new(1, 0, 0, 30)
+	posButton.BackgroundColor3 = buttonColor
+	posButton.BackgroundTransparency = buttonTransparency
+	posButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+	posButton.Font = Enum.Font.GothamBold
+	posButton.TextSize = 14
+	posButton.Text = locationName
+	posButton.Parent = crystalPage
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = cornerRadius
+	corner.Parent = posButton
+
+	posButton.MouseButton1Click:Connect(function()
+		local position = crystalLocations[locationName]
+		if position and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+			LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(position)
+		end
+		slideToPage(miscPage, true)
+	end)
+end
+
+local function getNearestTarget()
+	local nearestTarget = nil
+	local minDistance = math.huge
+	local playerRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+
+	if not playerRoot or not workspace:FindFirstChild("Living") then return nil end
+
+	for _, v in pairs(workspace.Living:GetChildren()) do
+		local humanoid = v:FindFirstChildOfClass("Humanoid")
+
+		if humanoid and humanoid.Health > 0 then
+			local nameMatch = table.find(farmTargets, v.Name)
+			local displayNameMatch = table.find(farmTargets, humanoid.DisplayName)
+
+			if nameMatch or displayNameMatch then
+				local targetRoot = v:FindFirstChild("HumanoidRootPart") or v:FindFirstChild("Torso")
+				if targetRoot then
+					local distance = (playerRoot.Position - targetRoot.Position).Magnitude
+					if distance < minDistance then
+						minDistance = distance
+						nearestTarget = v
+					end
+				end
+			end
+		end
+	end
+
+	return nearestTarget
+end
+
+local currentTarget = nil
+local currentTargetRoot = nil
+
+RunService.Heartbeat:Connect(function()
+	if farmEnabled and currentTarget and currentTargetRoot and currentTargetRoot.Parent then
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			local farmDistance = tonumber(distanceInput.Text) or 10
+
+			local farmPos
+
+			if farmMode == "Phía Sau" then
+				farmPos = currentTargetRoot.CFrame.Position - (currentTargetRoot.CFrame.LookVector * farmDistance)
+			elseif farmMode == "Phía Dưới" then
+				farmPos = currentTargetRoot.CFrame.Position - Vector3.new(0, farmDistance, 0)
+			end
+
+			if farmPos then
+				hrp.CFrame = CFrame.new(farmPos, currentTargetRoot.Position)
+			end
+		end
+	end
+end)
+
+task.spawn(function()
+	while task.wait(0.5) do
+		if farmEnabled then
+			local target = getNearestTarget()
+			
+			if target then
+				local targetRoot = target:FindFirstChild("HumanoidRootPart") or target:FindFirstChild("Torso")
+				local targetHumanoid = target:FindFirstChildOfClass("Humanoid")
+				
+				if targetRoot and targetHumanoid and targetHumanoid.Health > 0 then
+					currentTarget = target
+					currentTargetRoot = targetRoot
+				else
+					currentTarget = nil
+					currentTargetRoot = nil
+				end
+			else
+				currentTarget = nil
+				currentTargetRoot = nil
+			end
+		else
+			currentTarget = nil
+			currentTargetRoot = nil
+		end
+	end
+end)
+
+task.spawn(function()
+	while task.wait(0.2) do
+		if farmEnabled and currentTarget and currentTargetRoot and currentTargetRoot.Parent then
+			local targetHumanoid = currentTarget:FindFirstChildOfClass("Humanoid")
+			
+			if targetHumanoid and targetHumanoid.Health > 0 then
+				FireInput:InvokeServer(
+					buffer.fromstring("\0MOUSEBUTTON1")
+				)
+			end
+		end
+	end
+end)
